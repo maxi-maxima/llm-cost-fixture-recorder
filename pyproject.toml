@@ -1,0 +1,11 @@
+[project]
+name = "llm-cost-fixture-recorder"
+version = "0.1.0"
+description = "Record deterministic LLM cost fixtures so teams can catch pricing regressions in CI."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "maxi-maxima"}]
+
+[project.scripts]
+llm-cost-fixture-recorder = "llm_cost_fixture_recorder.__main__:main"
