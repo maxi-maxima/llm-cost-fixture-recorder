@@ -1,5 +1,5 @@
 import argparse, csv, json
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 DEFAULT_PRICES = {"gpt-4.1-mini": (Decimal("0.40"), Decimal("1.60")), "claude-sonnet-4": (Decimal("3.00"), Decimal("15.00")), "local": (Decimal("0"), Decimal("0"))}
@@ -28,15 +28,35 @@ def read_csv(path):
     with Path(path).open(newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
 
+def load_prices(path):
+    prices = dict(DEFAULT_PRICES)
+    with Path(path).open(encoding="utf-8") as fh:
+        payload = json.load(fh)
+    for model, value in payload.items():
+        try:
+            in_price = Decimal(str(value["input_per_million"]))
+            out_price = Decimal(str(value["output_per_million"]))
+        except (KeyError, TypeError, InvalidOperation) as exc:
+            raise ValueError(f"invalid price entry for {model!r}") from exc
+        prices[model] = (in_price, out_price)
+    return prices
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Estimate LLM fixture costs")
     parser.add_argument("csv_file")
     parser.add_argument("--budget", type=Decimal, default=None)
     parser.add_argument("--strict-models", action="store_true", help="Fail when the CSV contains models without configured prices")
+    parser.add_argument("--prices-json", help="JSON file with per-model input_per_million and output_per_million prices")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
-    result = estimate(read_csv(args.csv_file), DEFAULT_PRICES)
+    try:
+        prices = load_prices(args.prices_json) if args.prices_json else DEFAULT_PRICES
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"Could not load prices: {exc}")
+        return 4
+
+    result = estimate(read_csv(args.csv_file), prices)
     if args.json:
         print(json.dumps(result, indent=2))
     else:

@@ -24,6 +24,15 @@ pip install -e .
 
 ```bash
 python -m llm_cost_fixture_recorder examples/calls.csv --budget 0.05
+python -m llm_cost_fixture_recorder examples/calls.csv --prices-json prices.json --strict-models
+```
+
+自定义价格文件可以把 CI 中使用的模型价格固定下来，适合供应商价格变化或内部网关别名不在内置表中的场景：
+
+```json
+{
+  "my-model": {"input_per_million": "0.25", "output_per_million": "1.00"}
+}
 ```
 
 ## 示例
