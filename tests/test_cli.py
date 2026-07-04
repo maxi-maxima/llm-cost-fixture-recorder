@@ -82,5 +82,21 @@ class CliExampleTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 4)
         self.assertIn("Could not load prices", proc.stdout)
 
+    def test_warn_budget_reports_without_failing(self):
+        proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv', '--warn-budget', '0.01'], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("Budget warning: 0.038000 > 0.01", proc.stdout)
+
+    def test_warn_budget_is_included_in_json(self):
+        proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv', '--warn-budget', '0.01', '--json'], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 0)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["warn_budget_usd"], "0.010000")
+        self.assertTrue(payload["warn_budget_exceeded"])
+
 if __name__ == "__main__":
     unittest.main()

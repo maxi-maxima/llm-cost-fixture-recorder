@@ -45,6 +45,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Estimate LLM fixture costs")
     parser.add_argument("csv_file")
     parser.add_argument("--budget", type=Decimal, default=None)
+    parser.add_argument("--warn-budget", type=Decimal, default=None, help="Print a warning when total cost exceeds this soft budget without failing the command")
     parser.add_argument("--strict-models", action="store_true", help="Fail when the CSV contains models without configured prices")
     parser.add_argument("--prices-json", help="JSON file with per-model input_per_million and output_per_million prices")
     parser.add_argument("--json", action="store_true")
@@ -57,6 +58,9 @@ def main(argv=None):
         return 4
 
     result = estimate(read_csv(args.csv_file), prices)
+    warn_exceeded = args.warn_budget is not None and Decimal(result["total_usd"]) > args.warn_budget
+    result["warn_budget_usd"] = f"{args.warn_budget:.6f}" if args.warn_budget is not None else None
+    result["warn_budget_exceeded"] = warn_exceeded
     if args.json:
         print(json.dumps(result, indent=2))
     else:
@@ -66,6 +70,8 @@ def main(argv=None):
             print(f"- {call['name']}: {call['model']} ${call['cost_usd']}{note}")
         if result["unknown_models"]:
             print(f"Unknown models: {', '.join(result['unknown_models'])}")
+        if warn_exceeded:
+            print(f"Budget warning: {result['total_usd']} > {args.warn_budget}")
     if args.strict_models and result["unknown_models"]:
         print(f"Unknown model prices: {', '.join(result['unknown_models'])}")
         return 3

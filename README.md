@@ -24,8 +24,11 @@ No runtime dependencies are required beyond Python's standard library.
 
 ```bash
 python -m llm_cost_fixture_recorder examples/calls.csv --budget 0.05
+python -m llm_cost_fixture_recorder examples/calls.csv --warn-budget 0.03 --budget 0.05
 python -m llm_cost_fixture_recorder examples/calls.csv --prices-json prices.json --strict-models
 ```
+
+Use `--warn-budget` for soft CI alerts before enforcing a hard `--budget` failure.
 
 Custom price files let teams pin model rates in CI when providers change pricing or when internal gateway aliases do not match the built-in table:
 
