@@ -29,6 +29,8 @@ python -m llm_cost_fixture_recorder examples/calls.csv --prices-json prices.json
 ```
 
 Use `--warn-budget` for soft CI alerts before enforcing a hard `--budget` failure.
+Both text and JSON output now include per-model totals so reviewers can quickly
+see which model family is responsible for a fixture cost change.
 
 CSV input must include `model`, `prompt_tokens`, and `completion_tokens`. Invalid
 fixtures now fail with exit code `5` and a row-specific diagnostic instead of a

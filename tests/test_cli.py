@@ -128,5 +128,24 @@ class CliExampleTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 5)
         self.assertIn("Invalid CSV input: row 2 has invalid prompt_tokens value: many", proc.stdout)
 
+    def test_json_includes_model_totals(self):
+        proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv', '--json'], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 0)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["model_totals"], [
+            {"model": "claude-sonnet-4", "prompt_tokens": "5000", "completion_tokens": "1000", "cost_usd": "0.030000", "priced": True},
+            {"model": "gpt-4.1-mini", "prompt_tokens": "12000", "completion_tokens": "2000", "cost_usd": "0.008000", "priced": True},
+        ])
+
+    def test_text_output_includes_model_totals_when_multiple_models_exist(self):
+        proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv'], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("By model:", proc.stdout)
+        self.assertIn("- gpt-4.1-mini: $0.008000 (12000 prompt, 2000 completion tokens)", proc.stdout)
+
 if __name__ == "__main__":
     unittest.main()

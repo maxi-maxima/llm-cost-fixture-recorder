@@ -12,6 +12,7 @@ def estimate(rows, prices):
     total = Decimal("0")
     details = []
     unknown_models = set()
+    totals_by_model = {}
     for row in rows:
         model = row["model"]
         prompt = Decimal(row["prompt_tokens"])
@@ -25,8 +26,23 @@ def estimate(rows, prices):
             unknown_models.add(model)
         cost = (prompt / Decimal(1_000_000) * in_price) + (completion / Decimal(1_000_000) * out_price)
         total += cost
+        summary = totals_by_model.setdefault(model, {"model": model, "prompt_tokens": Decimal("0"), "completion_tokens": Decimal("0"), "cost_usd": Decimal("0"), "priced": priced})
+        summary["prompt_tokens"] += prompt
+        summary["completion_tokens"] += completion
+        summary["cost_usd"] += cost
+        summary["priced"] = summary["priced"] and priced
         details.append({"name": row.get("name", model), "model": model, "cost_usd": f"{cost:.6f}", "priced": priced})
-    return {"total_usd": f"{total:.6f}", "calls": details, "unknown_models": sorted(unknown_models)}
+    model_totals = []
+    for model in sorted(totals_by_model):
+        summary = totals_by_model[model]
+        model_totals.append({
+            "model": model,
+            "prompt_tokens": str(summary["prompt_tokens"]),
+            "completion_tokens": str(summary["completion_tokens"]),
+            "cost_usd": f"{summary['cost_usd']:.6f}",
+            "priced": summary["priced"],
+        })
+    return {"total_usd": f"{total:.6f}", "calls": details, "model_totals": model_totals, "unknown_models": sorted(unknown_models)}
 
 def read_csv(path):
     with Path(path).open(newline="", encoding="utf-8") as fh:
@@ -89,6 +105,11 @@ def main(argv=None):
         for call in result["calls"]:
             note = "" if call["priced"] else " (unknown price, treated as $0)"
             print(f"- {call['name']}: {call['model']} ${call['cost_usd']}{note}")
+        if len(result["model_totals"]) > 1:
+            print("By model:")
+            for model in result["model_totals"]:
+                note = "" if model["priced"] else " (unknown price, treated as $0)"
+                print(f"- {model['model']}: ${model['cost_usd']} ({model['prompt_tokens']} prompt, {model['completion_tokens']} completion tokens){note}")
         if result["unknown_models"]:
             print(f"Unknown models: {', '.join(result['unknown_models'])}")
         if warn_exceeded:
