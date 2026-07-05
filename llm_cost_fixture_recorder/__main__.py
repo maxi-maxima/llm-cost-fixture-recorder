@@ -3,6 +3,10 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 DEFAULT_PRICES = {"gpt-4.1-mini": (Decimal("0.40"), Decimal("1.60")), "claude-sonnet-4": (Decimal("3.00"), Decimal("15.00")), "local": (Decimal("0"), Decimal("0"))}
+REQUIRED_COLUMNS = ("model", "prompt_tokens", "completion_tokens")
+
+class CsvInputError(ValueError):
+    pass
 
 def estimate(rows, prices):
     total = Decimal("0")
@@ -26,7 +30,20 @@ def estimate(rows, prices):
 
 def read_csv(path):
     with Path(path).open(newline="", encoding="utf-8") as fh:
-        return list(csv.DictReader(fh))
+        reader = csv.DictReader(fh)
+        fieldnames = reader.fieldnames or []
+        missing = [name for name in REQUIRED_COLUMNS if name not in fieldnames]
+        if missing:
+            raise CsvInputError(f"missing required columns: {', '.join(missing)}")
+        rows = list(reader)
+    for row_number, row in enumerate(rows, start=2):
+        for column in ("prompt_tokens", "completion_tokens"):
+            value = row.get(column, "")
+            try:
+                Decimal(value)
+            except (InvalidOperation, TypeError):
+                raise CsvInputError(f"row {row_number} has invalid {column} value: {value}") from None
+    return rows
 
 def load_prices(path):
     prices = dict(DEFAULT_PRICES)
@@ -57,7 +74,11 @@ def main(argv=None):
         print(f"Could not load prices: {exc}")
         return 4
 
-    result = estimate(read_csv(args.csv_file), prices)
+    try:
+        result = estimate(read_csv(args.csv_file), prices)
+    except (CsvInputError, OSError) as exc:
+        print(f"Invalid CSV input: {exc}")
+        return 5
     warn_exceeded = args.warn_budget is not None and Decimal(result["total_usd"]) > args.warn_budget
     result["warn_budget_usd"] = f"{args.warn_budget:.6f}" if args.warn_budget is not None else None
     result["warn_budget_exceeded"] = warn_exceeded

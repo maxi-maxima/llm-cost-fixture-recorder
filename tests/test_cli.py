@@ -98,5 +98,35 @@ class CliExampleTest(unittest.TestCase):
         self.assertEqual(payload["warn_budget_usd"], "0.010000")
         self.assertTrue(payload["warn_budget_exceeded"])
 
+    def test_missing_required_csv_column_reports_input_error(self):
+        with tempfile.NamedTemporaryFile("w", newline="", suffix=".csv", delete=False) as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=["name", "model", "prompt_tokens"])
+            writer.writeheader()
+            writer.writerow({"name": "probe", "model": "gpt-4.1-mini", "prompt_tokens": "100"})
+            csv_path = csv_file.name
+        try:
+            proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', csv_path], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 5)
+        self.assertIn("Invalid CSV input: missing required columns: completion_tokens", proc.stdout)
+
+    def test_invalid_token_value_reports_row_number(self):
+        with tempfile.NamedTemporaryFile("w", newline="", suffix=".csv", delete=False) as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=["name", "model", "prompt_tokens", "completion_tokens"])
+            writer.writeheader()
+            writer.writerow({"name": "probe", "model": "gpt-4.1-mini", "prompt_tokens": "many", "completion_tokens": "50"})
+            csv_path = csv_file.name
+        try:
+            proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', csv_path], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 5)
+        self.assertIn("Invalid CSV input: row 2 has invalid prompt_tokens value: many", proc.stdout)
+
 if __name__ == "__main__":
     unittest.main()

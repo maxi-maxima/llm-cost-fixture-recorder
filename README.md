@@ -30,6 +30,10 @@ python -m llm_cost_fixture_recorder examples/calls.csv --prices-json prices.json
 
 Use `--warn-budget` for soft CI alerts before enforcing a hard `--budget` failure.
 
+CSV input must include `model`, `prompt_tokens`, and `completion_tokens`. Invalid
+fixtures now fail with exit code `5` and a row-specific diagnostic instead of a
+Python traceback, which makes CI failures easier to act on.
+
 Custom price files let teams pin model rates in CI when providers change pricing or when internal gateway aliases do not match the built-in table:
 
 ```json
