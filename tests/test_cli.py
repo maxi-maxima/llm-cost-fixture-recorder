@@ -147,5 +147,25 @@ class CliExampleTest(unittest.TestCase):
         self.assertIn("By model:", proc.stdout)
         self.assertIn("- gpt-4.1-mini: $0.008000 (12000 prompt, 2000 completion tokens)", proc.stdout)
 
+    def test_model_totals_csv_writes_report_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir, "model-totals.csv")
+            proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv', '--model-totals-csv', str(output_path)], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+
+            self.assertEqual(proc.stderr, "")
+            self.assertEqual(proc.returncode, 0)
+            rows = list(csv.DictReader(output_path.read_text(encoding="utf-8").splitlines()))
+
+        self.assertEqual(rows[0], {"model": "claude-sonnet-4", "prompt_tokens": "5000", "completion_tokens": "1000", "cost_usd": "0.030000", "priced": "True"})
+        self.assertIn("Total: $0.038000", proc.stdout)
+
+    def test_model_totals_csv_dash_appends_csv_to_stdout(self):
+        proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv', '--model-totals-csv', '-'], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("model,prompt_tokens,completion_tokens,cost_usd,priced", proc.stdout)
+        self.assertIn("gpt-4.1-mini,12000,2000,0.008000,True", proc.stdout)
+
 if __name__ == "__main__":
     unittest.main()
