@@ -147,6 +147,7 @@ class CliExampleTest(unittest.TestCase):
         self.assertIn("By model:", proc.stdout)
         self.assertIn("- gpt-4.1-mini: $0.008000 (12000 prompt, 2000 completion tokens)", proc.stdout)
 
+
     def test_model_totals_csv_writes_report_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir, "model-totals.csv")
@@ -166,6 +167,17 @@ class CliExampleTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertIn("model,prompt_tokens,completion_tokens,cost_usd,priced", proc.stdout)
         self.assertIn("gpt-4.1-mini,12000,2000,0.008000,True", proc.stdout)
+
+    def test_markdown_output_is_review_ready(self):
+        proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv', '--warn-budget', '0.01', '--markdown'], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("## LLM Fixture Cost Report", proc.stdout)
+        self.assertIn("**Total:** $0.038000", proc.stdout)
+        self.assertIn("| Name | Model | Cost | Pricing |", proc.stdout)
+        self.assertIn("### By model", proc.stdout)
+        self.assertIn("Budget warning: 0.038000 > 0.010000", proc.stdout)
 
 if __name__ == "__main__":
     unittest.main()

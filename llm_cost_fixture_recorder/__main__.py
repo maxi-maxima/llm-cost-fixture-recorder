@@ -85,6 +85,27 @@ def write_model_totals_csv(path, model_totals):
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(model_totals)
+def format_markdown(result):
+    lines = [
+        "## LLM Fixture Cost Report",
+        "",
+        f"**Total:** ${result['total_usd']}",
+        "",
+        "| Name | Model | Cost | Pricing |",
+        "| --- | --- | ---: | --- |",
+    ]
+    for call in result["calls"]:
+        pricing = "configured" if call["priced"] else "unknown; treated as $0"
+        lines.append(f"| {call['name']} | {call['model']} | ${call['cost_usd']} | {pricing} |")
+    if result["model_totals"]:
+        lines.extend(["", "### By model", "", "| Model | Prompt tokens | Completion tokens | Cost |", "| --- | ---: | ---: | ---: |"] )
+        for model in result["model_totals"]:
+            lines.append(f"| {model['model']} | {model['prompt_tokens']} | {model['completion_tokens']} | ${model['cost_usd']} |")
+    if result["unknown_models"]:
+        lines.extend(["", f"Unknown models: {', '.join(result['unknown_models'])}"])
+    if result.get("warn_budget_exceeded"):
+        lines.extend(["", f"Budget warning: {result['total_usd']} > {result['warn_budget_usd']}"])
+    return "\n".join(lines)
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Estimate LLM fixture costs")
@@ -94,7 +115,9 @@ def main(argv=None):
     parser.add_argument("--strict-models", action="store_true", help="Fail when the CSV contains models without configured prices")
     parser.add_argument("--prices-json", help="JSON file with per-model input_per_million and output_per_million prices")
     parser.add_argument("--model-totals-csv", help="Write per-model token and cost totals to a CSV file; use '-' for stdout")
-    parser.add_argument("--json", action="store_true")
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument("--json", action="store_true")
+    output_group.add_argument("--markdown", action="store_true", help="Print a Markdown report suitable for PR comments or cost review docs")
     args = parser.parse_args(argv)
 
     try:
@@ -119,6 +142,8 @@ def main(argv=None):
             return 6
     if args.json:
         print(json.dumps(result, indent=2))
+    elif args.markdown:
+        print(format_markdown(result))
     else:
         print(f"Total: ${result['total_usd']}")
         for call in result["calls"]:
