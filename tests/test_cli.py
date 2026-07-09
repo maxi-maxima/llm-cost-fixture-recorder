@@ -179,5 +179,41 @@ class CliExampleTest(unittest.TestCase):
         self.assertIn("### By model", proc.stdout)
         self.assertIn("Budget warning: 0.038000 > 0.010000", proc.stdout)
 
+    def test_baseline_json_reports_delta_without_failing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            baseline_path = Path(temp_dir, "baseline.json")
+            baseline_path.write_text(json.dumps({"total_usd": "0.030000"}), encoding="utf-8")
+            proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv', '--baseline-json', str(baseline_path), '--json'], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 0)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["baseline_comparison"]["baseline_total_usd"], "0.030000")
+        self.assertEqual(payload["baseline_comparison"]["delta_usd"], "0.008000")
+        self.assertEqual(payload["baseline_comparison"]["delta_percent"], "26.67")
+
+    def test_max_increase_fails_when_baseline_delta_is_too_large(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            baseline_path = Path(temp_dir, "baseline.json")
+            baseline_path.write_text(json.dumps({"total_usd": "0.030000"}), encoding="utf-8")
+            proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv', '--baseline-json', str(baseline_path), '--max-increase', '0.001'], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 8)
+        self.assertIn("Baseline increase exceeded: 0.008000 > 0.001000", proc.stdout)
+
+    def test_bad_baseline_json_returns_configuration_error(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as baseline_file:
+            baseline_file.write('{"not_total": "0.01"}')
+            baseline_path = baseline_file.name
+        try:
+            proc = subprocess.run(['python', '-m', 'llm_cost_fixture_recorder', 'examples/calls.csv', '--baseline-json', baseline_path], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False)
+        finally:
+            Path(baseline_path).unlink(missing_ok=True)
+
+        self.assertEqual(proc.stderr, "")
+        self.assertEqual(proc.returncode, 7)
+        self.assertIn("Could not load baseline", proc.stdout)
+
 if __name__ == "__main__":
     unittest.main()

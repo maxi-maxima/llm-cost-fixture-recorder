@@ -74,6 +74,35 @@ def load_prices(path):
         prices[model] = (in_price, out_price)
     return prices
 
+def load_baseline(path):
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid baseline JSON: {exc}") from exc
+    if "total_usd" not in payload:
+        raise ValueError("baseline JSON must include total_usd")
+    try:
+        return Decimal(str(payload["total_usd"]))
+    except InvalidOperation as exc:
+        raise ValueError("baseline total_usd must be numeric") from exc
+
+
+def apply_baseline(result, baseline_total, max_increase):
+    current = Decimal(result["total_usd"])
+    delta = current - baseline_total
+    percent = None if baseline_total == 0 else (delta / baseline_total * Decimal("100"))
+    comparison = {
+        "baseline_total_usd": f"{baseline_total:.6f}",
+        "delta_usd": f"{delta:.6f}",
+        "delta_percent": None if percent is None else f"{percent:.2f}",
+    }
+    if max_increase is not None:
+        comparison["max_increase_usd"] = f"{max_increase:.6f}"
+        comparison["baseline_exceeded"] = delta > max_increase
+    result["baseline_comparison"] = comparison
+    return comparison
+
+
 def write_model_totals_csv(path, model_totals):
     fieldnames = ["model", "prompt_tokens", "completion_tokens", "cost_usd", "priced"]
     if path == "-":
@@ -115,6 +144,8 @@ def main(argv=None):
     parser.add_argument("--strict-models", action="store_true", help="Fail when the CSV contains models without configured prices")
     parser.add_argument("--prices-json", help="JSON file with per-model input_per_million and output_per_million prices")
     parser.add_argument("--model-totals-csv", help="Write per-model token and cost totals to a CSV file; use '-' for stdout")
+    parser.add_argument("--baseline-json", help="Compare total_usd against a previous JSON report produced by --json")
+    parser.add_argument("--max-increase", type=Decimal, default=None, help="Fail when --baseline-json total cost increases by more than this USD amount")
     output_group = parser.add_mutually_exclusive_group()
     output_group.add_argument("--json", action="store_true")
     output_group.add_argument("--markdown", action="store_true", help="Print a Markdown report suitable for PR comments or cost review docs")
@@ -131,6 +162,13 @@ def main(argv=None):
     except (CsvInputError, OSError) as exc:
         print(f"Invalid CSV input: {exc}")
         return 5
+    try:
+        baseline_total = load_baseline(args.baseline_json) if args.baseline_json else None
+    except ValueError as exc:
+        print(f"Could not load baseline: {exc}")
+        return 7
+    if baseline_total is not None:
+        apply_baseline(result, baseline_total, args.max_increase)
     warn_exceeded = args.warn_budget is not None and Decimal(result["total_usd"]) > args.warn_budget
     result["warn_budget_usd"] = f"{args.warn_budget:.6f}" if args.warn_budget is not None else None
     result["warn_budget_exceeded"] = warn_exceeded
@@ -158,8 +196,18 @@ def main(argv=None):
             print(f"Unknown models: {', '.join(result['unknown_models'])}")
         if warn_exceeded:
             print(f"Budget warning: {result['total_usd']} > {args.warn_budget}")
+        if result.get("baseline_comparison"):
+            baseline = result["baseline_comparison"]
+            line = f"Baseline delta: ${baseline['delta_usd']} vs ${baseline['baseline_total_usd']}"
+            if baseline.get("delta_percent") is not None:
+                line += f" ({baseline['delta_percent']}%)"
+            print(line)
     if args.model_totals_csv == "-":
         write_model_totals_csv("-", result["model_totals"])
+    if result.get("baseline_comparison", {}).get("baseline_exceeded"):
+        baseline = result["baseline_comparison"]
+        print(f"Baseline increase exceeded: {baseline['delta_usd']} > {baseline['max_increase_usd']}")
+        return 8
     if args.strict_models and result["unknown_models"]:
         print(f"Unknown model prices: {', '.join(result['unknown_models'])}")
         return 3
