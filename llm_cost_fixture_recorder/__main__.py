@@ -56,9 +56,11 @@ def read_csv(path):
         for column in ("prompt_tokens", "completion_tokens"):
             value = row.get(column, "")
             try:
-                Decimal(value)
+                number = Decimal(value)
             except (InvalidOperation, TypeError):
                 raise CsvInputError(f"row {row_number} has invalid {column} value: {value}") from None
+            if not number.is_finite():
+                raise CsvInputError(f"row {row_number} has invalid {column} value: {value}")
     return rows
 
 def load_prices(path):
